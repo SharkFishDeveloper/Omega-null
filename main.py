@@ -77,6 +77,33 @@ for piece in ['P', 'N', 'B', 'R', 'Q', 'K']:
 
 # === Additional Heuristic Functions ===
 
+def order_moves(board):
+    """
+    Orders moves based on:
+    1. Captures (using MVV-LVA heuristic)
+    2. Checks
+    3. Other moves (default ordering)
+    """
+    moves = list(board.legal_moves)
+
+    def move_score(move):
+        if board.is_capture(move):
+            attacker = board.piece_at(move.from_square)
+            victim = board.piece_at(move.to_square)
+            attacker_value = PIECE_VALUES.get(attacker.symbol(), 0)
+            victim_value = PIECE_VALUES.get(victim.symbol(), 0)
+            return victim_value - attacker_value  # MVV-LVA: Capture high-value pieces with low-value pieces
+        
+        if board.gives_check(move):
+            return 1000  # Prioritize checks
+        
+        return 0  # Default priority for non-capturing, non-check moves
+
+    # Sort moves based on the computed score (higher first)
+    moves.sort(key=move_score, reverse=True)
+
+    return moves
+
 def evaluate_mobility(board):
     """
     Evaluate mobility as the difference in the number of legal moves between
@@ -178,14 +205,15 @@ def evaluate_board(board):
     return score
 
 # === Minimax with Alpha-Beta Pruning ===
-
 def minimax(board, depth, alpha, beta, maximizing):
     if depth == 0 or board.is_game_over():
         return evaluate_board(board)
 
+    moves = order_moves(board)  # Use move ordering here
+
     if maximizing:
         max_eval = -float("inf")
-        for move in board.legal_moves:
+        for move in moves:
             board.push(move)
             eval_value = minimax(board, depth - 1, alpha, beta, False)
             board.pop()
@@ -196,7 +224,7 @@ def minimax(board, depth, alpha, beta, maximizing):
         return max_eval
     else:
         min_eval = float("inf")
-        for move in board.legal_moves:
+        for move in moves:
             board.push(move)
             eval_value = minimax(board, depth - 1, alpha, beta, True)
             board.pop()
