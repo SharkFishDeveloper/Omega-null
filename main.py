@@ -90,8 +90,8 @@ def order_moves(board):
         if board.is_capture(move):
             attacker = board.piece_at(move.from_square)
             victim = board.piece_at(move.to_square)
-            attacker_value = PIECE_VALUES.get(attacker.symbol(), 0)
-            victim_value = PIECE_VALUES.get(victim.symbol(), 0)
+            attacker_value = PIECE_VALUES.get(attacker.symbol(), 0) if attacker else 0
+            victim_value = PIECE_VALUES.get(victim.symbol(), 0) if victim else 0
             return victim_value - attacker_value  # MVV-LVA: Capture high-value pieces with low-value pieces
         
         if board.gives_check(move):
