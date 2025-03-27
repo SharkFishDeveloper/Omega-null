@@ -1,3 +1,4 @@
+import time
 import chess
 import numpy as np
 
@@ -75,63 +76,60 @@ for piece in ['P', 'N', 'B', 'R', 'Q', 'K']:
     PIECE_SQUARE_TABLES[piece.lower()] = PIECE_SQUARE_TABLES[piece][::-1]
 
 # === Additional Heuristic Functions ===
-
 def order_moves(board):
     moves = list(board.legal_moves)
+    opponent = not board.turn
 
     def move_score(move):
-        board.push(move)  # make the move temporarily
-        score = 0  
-
-    # 1. Checkmate detection (Highest priority)
+        score = 0
+        is_capture = board.is_capture(move)
+        victim_value = 0
+        attacker_value = 0
+        
+        # Check captures using MVV-LVA before pushing the move
+        if is_capture:
+            victim = board.piece_at(move.to_square)
+            attacker = board.piece_at(move.from_square)
+            victim_value = PIECE_VALUES.get(victim.symbol(), 0) if victim else 0
+            attacker_value = PIECE_VALUES.get(attacker.symbol(), 0) if attacker else 0
+            score += (victim_value - attacker_value)
+        
+        board.push(move)
+        # Check for checkmate (highest priority)
         if board.is_checkmate():
             board.pop()
-            return float("inf")  
-
-    # 2. Captures using MVV-LVA heuristic
-        if board.is_capture(move):
-            attacker = board.piece_at(move.from_square)
-            victim = board.piece_at(move.to_square)
-            attacker_value = PIECE_VALUES.get(attacker.symbol(), 0) if attacker else 0
-            victim_value = PIECE_VALUES.get(victim.symbol(), 0) if victim else 0
-            score += (victim_value - attacker_value)  # Prefer high-value captures
-
-        # Avoid bad captures if the capturing piece is vulnerable after the move
-            if board.is_attacked_by(not board.turn, move.to_square):
-                score -= attacker_value  # strong penalty for hanging captures
-
-    # Additional safety check for non-capture moves and overall vulnerability
-        moved_piece = board.piece_at(move.to_square)
-        if moved_piece and board.is_attacked_by(not board.turn, move.to_square):
-            score -= PIECE_VALUES.get(moved_piece.symbol(), 0) * 0.5  # Extra penalty
-
-    # 3. Checks are prioritized
+            return float('inf')
+        # Check if move gives check
         if board.is_check():
-            score += 1000  
-
-    # 4. Castling (King Safety)
+            score += 1000
+        # Check castling
         if board.is_castling(move):
-            score += 300  
-
-        board.pop()  # undo the move
+            score += 300
+        # Check if moved piece is attacked by the original opponent
+        if board.is_attacked_by(opponent, move.to_square):
+            moved_piece = board.piece_at(move.to_square)
+            if moved_piece:
+                penalty = PIECE_VALUES.get(moved_piece.symbol().upper(), 0) * 0.5
+                score -= penalty
+        # Penalize hanging captures
+        if is_capture and board.is_attacked_by(opponent, move.to_square):
+            score -= attacker_value  # Attacker_value from before push
+        board.pop()
         return score
 
-
-    return sorted(board.legal_moves, key=move_score, reverse=True)
+    return sorted(moves, key=move_score, reverse=True)
 
 def evaluate_mobility(board):
-    """
-    Evaluate mobility as the difference in the number of legal moves between
-    White and Black, weighted by a factor.
-    """
-    board_white = board.copy()
-    board_white.turn = chess.WHITE
-    white_moves = board_white.legal_moves.count()
-
-    board_black = board.copy()
-    board_black.turn = chess.BLACK
-    black_moves = board_black.legal_moves.count()
-
+    original_turn = board.turn
+    try:
+        # White's mobility
+        board.turn = chess.WHITE
+        white_moves = board.legal_moves.count()
+        # Black's mobility
+        board.turn = chess.BLACK
+        black_moves = board.legal_moves.count()
+    finally:
+        board.turn = original_turn
     return 15 * (white_moves - black_moves)
 
 def evaluate_king_safety(board):
@@ -150,7 +148,6 @@ def evaluate_king_safety(board):
         safety_score += 20
     if not board.has_castling_rights(chess.BLACK) and black_king_sq != chess.E8:
         safety_score -= 20
-
     return safety_score
 
 def evaluate_pawn_structure(board):
@@ -188,35 +185,41 @@ def evaluate_pawn_structure(board):
 
 def evaluate_board(board):
     score = 0
-    board_2d = np.array(str(board).split()).reshape(8, 8)
-    for i in range(8):
-        for j in range(8):
-            piece = board_2d[i][j]
-            if piece != '.':
-                piece_val = PIECE_VALUES.get(piece, 0)
-                table = PIECE_SQUARE_TABLES.get(piece, None)
-                if table:
-                    pos_val = table[i][j]
-                    piece_val += pos_val
-                score += piece_val
-
+    for square in chess.SQUARES:
+        piece = board.piece_at(square)
+        if piece:
+            symbol = piece.symbol().upper()
+            value = PIECE_VALUES.get(symbol, 0)
+            if piece.color == chess.BLACK:
+                value = -value
+            # Add piece-square table value (customize tables)
+            row = chess.square_rank(square)
+            col = chess.square_file(square)
+            if piece.color == chess.BLACK:
+                row = 7 - row
+            # Example for pawns (modify with actual table)
+            if symbol == 'P':
+                value += (row - 2) * 10  # Encourage advancing pawns
+            score += value
     score += evaluate_mobility(board)
     score += evaluate_king_safety(board)
     score += evaluate_pawn_structure(board)
     return score
 
-def quiescence_search(board, alpha, beta):
+def quiescence_search(board, alpha, beta, depth=3):
     stand_pat = evaluate_board(board)
     if stand_pat >= beta:
         return beta
     if alpha < stand_pat:
         alpha = stand_pat
+    if depth == 0:
+        return alpha
 
     for move in order_moves(board):
-        if not board.is_capture(move):
-            continue  # only consider capture moves
+        if not (board.is_capture(move) or board.gives_check(move)):
+            continue
         board.push(move)
-        score = -quiescence_search(board, -beta, -alpha)
+        score = -quiescence_search(board, -beta, -alpha, depth-1)
         board.pop()
         if score >= beta:
             return beta
@@ -224,47 +227,54 @@ def quiescence_search(board, alpha, beta):
             alpha = score
     return alpha
 
-
 def minimax(board, depth, alpha, beta, maximizing):
     if depth == 0 or board.is_game_over():
-        return quiescence_search(board, alpha, beta)
+        return quiescence_search(board, alpha, beta, depth=2)  # Shallow quiescence
 
     moves = order_moves(board)
+    if not moves:
+        return evaluate_board(board)
+    
     if maximizing:
-        max_eval = -float("inf")
+        max_eval = -float('inf')
         for move in moves:
             board.push(move)
-            eval_value = minimax(board, depth - 1, alpha, beta, False)
+            eval_val = minimax(board, depth-1, alpha, beta, False)
             board.pop()
-            max_eval = max(max_eval, eval_value)
-            alpha = max(alpha, eval_value)
+            max_eval = max(max_eval, eval_val)
+            alpha = max(alpha, eval_val)
             if beta <= alpha:
                 break
         return max_eval
     else:
-        min_eval = float("inf")
+        min_eval = float('inf')
         for move in moves:
             board.push(move)
-            eval_value = minimax(board, depth - 1, alpha, beta, True)
+            eval_val = minimax(board, depth-1, alpha, beta, True)
             board.pop()
-            min_eval = min(min_eval, eval_value)
-            beta = min(beta, eval_value)
+            min_eval = min(min_eval, eval_val)
+            beta = min(beta, eval_val)
             if beta <= alpha:
                 break
         return min_eval
 
-
-def best_move(board, depth=3):
-    best_val = -float("inf")
-    best_mv = None
-    for move in board.legal_moves:
-        board.push(move)
-        move_val = minimax(board, depth - 1, -float("inf"), float("inf"), False)
-        board.pop()
-        if move_val > best_val:
-            best_val = move_val
-            best_mv = move
-    return best_mv
+def best_move(board,depth,max_time=4):
+    start_time = time.time()
+    best_move = None
+    best_score = -float('inf')
+    depth = 1
+    while time.time() - start_time < max_time:
+        for move in order_moves(board):
+            if time.time() - start_time >= max_time:
+                break
+            board.push(move)
+            current_score = minimax(board, depth-1, -float('inf'), float('inf'), False)
+            board.pop()
+            if current_score > best_score:
+                best_score = current_score
+                best_move = move
+        depth += 1
+    return best_move if best_move else next(iter(board.legal_moves))
 
 
 
