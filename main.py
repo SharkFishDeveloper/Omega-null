@@ -12,54 +12,54 @@ PIECE_SQUARE_TABLES = {
     'P': [  # White Pawn
         [0, 0, 0, 0, 0, 0, 0, 0],
         [50, 50, 50, 50, 50, 50, 50, 50],
-        [10, 10, 20, 30, 30, 20, 10, 10],
-        [5, 5, 10, 25, 25, 10, 5, 5],
-        [0, 0, 0, 20, 20, 0, 0, 0],
-        [5, -5, -10, 0, 0, -10, -5, 5],
+        [10, 15, 20, 30, 30, 20, 15, 10],
+        [5, 10, 15, 25, 25, 15, 10, 5],
+        [0, 0, 10, 20, 20, 10, 0, 0],
+        [5, -5, -10, 5, 5, -10, -5, 5],
         [5, 10, 10, -20, -20, 10, 10, 5],
         [0, 0, 0, 0, 0, 0, 0, 0]
     ],
     'N': [  # White Knight
         [-50, -40, -30, -30, -30, -30, -40, -50],
         [-40, -20, 0, 5, 5, 0, -20, -40],
-        [-30, 5, 10, 15, 15, 10, 5, -30],
-        [-30, 0, 15, 20, 20, 15, 0, -30],
-        [-30, 5, 15, 20, 20, 15, 5, -30],
-        [-30, 0, 10, 15, 15, 10, 0, -30],
-        [-40, -20, 0, 0, 0, 0, -20, -40],
+        [-30, 5, 20, 20, 20, 20, 5, -30],
+        [-30, 10, 20, 25, 25, 20, 10, -30],
+        [-30, 5, 20, 25, 25, 20, 5, -30],
+        [-30, 0, 10, 20, 20, 10, 0, -30],
+        [-40, -20, 0, 5, 5, 0, -20, -40],
         [-50, -40, -30, -30, -30, -30, -40, -50]
     ],
     'B': [  # White Bishop
         [-20, -10, -10, -10, -10, -10, -10, -20],
         [-10, 5, 0, 0, 0, 0, 5, -10],
         [-10, 10, 10, 10, 10, 10, 10, -10],
-        [-10, 0, 10, 10, 10, 10, 0, -10],
-        [-10, 5, 5, 10, 10, 5, 5, -10],
-        [-10, 0, 5, 10, 10, 5, 0, -10],
+        [-10, 5, 10, 15, 15, 10, 5, -10],
+        [-10, 0, 10, 15, 15, 10, 0, -10],
+        [-10, 5, 10, 10, 10, 10, 5, -10],
         [-10, 0, 0, 0, 0, 0, 0, -10],
         [-20, -10, -10, -10, -10, -10, -10, -20]
     ],
     'R': [  # White Rook
-        [0, 0, 0, 5, 5, 0, 0, 0],
-        [-5, 0, 0, 0, 0, 0, 0, -5],
-        [-5, 0, 0, 0, 0, 0, 0, -5],
-        [-5, 0, 0, 0, 0, 0, 0, -5],
-        [-5, 0, 0, 0, 0, 0, 0, -5],
-        [-5, 0, 0, 0, 0, 0, 0, -5],
+        [0, 0, 5, 10, 10, 5, 0, 0],
+        [-5, 0, 0, 5, 5, 0, 0, -5],
+        [-5, 0, 0, 5, 5, 0, 0, -5],
+        [-5, 0, 0, 5, 5, 0, 0, -5],
+        [-5, 0, 0, 5, 5, 0, 0, -5],
+        [-5, 0, 0, 5, 5, 0, 0, -5],
         [5, 10, 10, 10, 10, 10, 10, 5],
-        [0, 0, 0, 5, 5, 0, 0, 0]
+        [0, 0, 5, 10, 10, 5, 0, 0]
     ],
     'Q': [  # White Queen
         [-20, -10, -10, -5, -5, -10, -10, -20],
-        [-10, 0, 0, 0, 0, 0, 0, -10],
+        [-10, 0, 5, 0, 0, 0, 0, -10],
         [-10, 0, 5, 5, 5, 5, 0, -10],
         [-5, 0, 5, 5, 5, 5, 0, -5],
-        [0, 0, 5, 5, 5, 5, 0, -5],
+        [-5, 0, 5, 5, 5, 5, 0, -5],
         [-10, 5, 5, 5, 5, 5, 0, -10],
         [-10, 0, 5, 0, 0, 0, 0, -10],
         [-20, -10, -10, -5, -5, -10, -10, -20]
     ],
-    'K': [  # White King (middle game)
+    'K': [  # White King (Middle Game)
         [-30, -40, -40, -50, -50, -40, -40, -30],
         [-30, -40, -40, -50, -50, -40, -40, -30],
         [-30, -40, -40, -50, -50, -40, -40, -30],
@@ -70,7 +70,6 @@ PIECE_SQUARE_TABLES = {
         [20, 30, 10, 0, 0, 10, 30, 20]
     ]
 }
-
 # For black pieces, flip the white tables vertically.
 for piece in ['P', 'N', 'B', 'R', 'Q', 'K']:
     PIECE_SQUARE_TABLES[piece.lower()] = PIECE_SQUARE_TABLES[piece][::-1]
@@ -78,31 +77,47 @@ for piece in ['P', 'N', 'B', 'R', 'Q', 'K']:
 # === Additional Heuristic Functions ===
 
 def order_moves(board):
-    """
-    Orders moves based on:
-    1. Captures (using MVV-LVA heuristic)
-    2. Checks
-    3. Other moves (default ordering)
-    """
     moves = list(board.legal_moves)
 
     def move_score(move):
+        board.push(move)  # make the move temporarily
+        score = 0  
+
+    # 1. Checkmate detection (Highest priority)
+        if board.is_checkmate():
+            board.pop()
+            return float("inf")  
+
+    # 2. Captures using MVV-LVA heuristic
         if board.is_capture(move):
             attacker = board.piece_at(move.from_square)
             victim = board.piece_at(move.to_square)
             attacker_value = PIECE_VALUES.get(attacker.symbol(), 0) if attacker else 0
             victim_value = PIECE_VALUES.get(victim.symbol(), 0) if victim else 0
-            return victim_value - attacker_value  # MVV-LVA: Capture high-value pieces with low-value pieces
-        
-        if board.gives_check(move):
-            return 1000  # Prioritize checks
-        
-        return 0  # Default priority for non-capturing, non-check moves
+            score += (victim_value - attacker_value)  # Prefer high-value captures
 
-    # Sort moves based on the computed score (higher first)
-    moves.sort(key=move_score, reverse=True)
+        # Avoid bad captures if the capturing piece is vulnerable after the move
+            if board.is_attacked_by(not board.turn, move.to_square):
+                score -= attacker_value  # strong penalty for hanging captures
 
-    return moves
+    # Additional safety check for non-capture moves and overall vulnerability
+        moved_piece = board.piece_at(move.to_square)
+        if moved_piece and board.is_attacked_by(not board.turn, move.to_square):
+            score -= PIECE_VALUES.get(moved_piece.symbol(), 0) * 0.5  # Extra penalty
+
+    # 3. Checks are prioritized
+        if board.is_check():
+            score += 1000  
+
+    # 4. Castling (King Safety)
+        if board.is_castling(move):
+            score += 300  
+
+        board.pop()  # undo the move
+        return score
+
+
+    return sorted(board.legal_moves, key=move_score, reverse=True)
 
 def evaluate_mobility(board):
     """
@@ -117,13 +132,9 @@ def evaluate_mobility(board):
     board_black.turn = chess.BLACK
     black_moves = board_black.legal_moves.count()
 
-    return 10 * (white_moves - black_moves)
+    return 15 * (white_moves - black_moves)
 
 def evaluate_king_safety(board):
-    """
-    A basic king safety evaluation that penalizes a king in the center and 
-    rewards positions that suggest castling (i.e. king not on its initial square).
-    """
     safety_score = 0
     center_squares = [chess.D4, chess.D5, chess.E4, chess.E5]
 
@@ -143,9 +154,6 @@ def evaluate_king_safety(board):
     return safety_score
 
 def evaluate_pawn_structure(board):
-    """
-    Evaluate pawn structure by penalizing doubled and isolated pawns.
-    """
     pawn_score = 0
     white_pawns = board.pieces(chess.PAWN, chess.WHITE)
     black_pawns = board.pieces(chess.PAWN, chess.BLACK)
@@ -178,15 +186,8 @@ def evaluate_pawn_structure(board):
 
     return pawn_score
 
-# === Combined Evaluation Function ===
-
 def evaluate_board(board):
-    """
-    Combines material, positional (piece-square tables), mobility, king safety,
-    and pawn structure into a single evaluation score. A positive score favors White.
-    """
     score = 0
-    # Convert board string to a 2D array (8x8)
     board_2d = np.array(str(board).split()).reshape(8, 8)
     for i in range(8):
         for j in range(8):
@@ -204,13 +205,31 @@ def evaluate_board(board):
     score += evaluate_pawn_structure(board)
     return score
 
-# === Minimax with Alpha-Beta Pruning ===
+def quiescence_search(board, alpha, beta):
+    stand_pat = evaluate_board(board)
+    if stand_pat >= beta:
+        return beta
+    if alpha < stand_pat:
+        alpha = stand_pat
+
+    for move in order_moves(board):
+        if not board.is_capture(move):
+            continue  # only consider capture moves
+        board.push(move)
+        score = -quiescence_search(board, -beta, -alpha)
+        board.pop()
+        if score >= beta:
+            return beta
+        if score > alpha:
+            alpha = score
+    return alpha
+
+
 def minimax(board, depth, alpha, beta, maximizing):
     if depth == 0 or board.is_game_over():
-        return evaluate_board(board)
+        return quiescence_search(board, alpha, beta)
 
-    moves = order_moves(board)  # Use move ordering here
-
+    moves = order_moves(board)
     if maximizing:
         max_eval = -float("inf")
         for move in moves:
@@ -234,6 +253,7 @@ def minimax(board, depth, alpha, beta, maximizing):
                 break
         return min_eval
 
+
 def best_move(board, depth=3):
     best_val = -float("inf")
     best_mv = None
@@ -246,34 +266,51 @@ def best_move(board, depth=3):
             best_mv = move
     return best_mv
 
-# === Interactive Game: Input Moves for Both Colors, with Suggestion for White ===
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 def interactive_game_with_white_suggestion():
-    """
-    In this interactive mode, the program takes input from both White and Black.
-    - On White's turn, it first displays the best move suggestion (using the engine) but
-      does not update the board with it.
-    - You then enter White's move manually (using standard algebraic notation).
-    - On Black's turn, you enter the move normally.
-    The board updates only when you input a move.
-    """
     board = chess.Board()
+    player_side = input("Choose your side (W/B): ").strip().upper()
+    is_player_white = (player_side == "W")
     move_count = 0
-
+    
     while not board.is_game_over():
         print("\nCurrent Board:\n")
-        print(board, "\n")
-
-        if board.turn == chess.WHITE:
+        if  board.turn == chess.WHITE:
+            print(board)
+        else:
+            print(board.transform(chess.flip_horizontal).transform(chess.flip_vertical)) 
+        
+        suggestion = False
+        if (board.turn == chess.WHITE and is_player_white==False) or (board.turn == chess.BLACK and  is_player_white):
             suggestion = best_move(board, depth=3)
             if suggestion:
-                print("Engine suggests for White: ", board.san(suggestion))
+                print(f"Engine suggests for {'White' if board.turn == chess.WHITE else 'Black'}: {board.san(suggestion)}")
             else:
-                print("No legal moves available for White!")
-            user_move = input("Enter White's move (SAN, e.g., e4, Nf3): ")
-        else:
-            user_move = input("Enter Black's move (SAN, e.g., e5, Nc6): ")
-
+                print(f"No legal moves available for {'White' if board.turn == chess.WHITE else 'Black'}!")
+        
+        user_move = input(f"Enter {'White' if board.turn == chess.WHITE else 'Black'}'s move (SAN, e.g., e4, Nf3): ")
+        
         try:
             move = board.parse_san(user_move)
             if move in board.legal_moves:
@@ -281,10 +318,11 @@ def interactive_game_with_white_suggestion():
                 move_count += 1
             else:
                 print("Illegal move. Please try again.")
-        except Exception as e:
+        except Exception:
             print("Invalid move notation. Please try again.")
-
+    
     print("Game over after", move_count, "moves. Result:", board.result())
 
 if __name__ == "__main__":
     interactive_game_with_white_suggestion()
+

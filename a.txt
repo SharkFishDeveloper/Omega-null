@@ -1,0 +1,26 @@
+
+        # ✅ 5. Development bonus (Knights & Bishops in the opening)
+        piece = board.piece_at(move.from_square)
+        if piece and piece.symbol().lower() in {'n', 'b'}:  # Knight or Bishop
+            score += 50  
+
+        # ✅ 6. Center control (Encourage e4, d4, e5, d5)
+        if move.to_square in [chess.E4, chess.D4, chess.E5, chess.D5]:
+            score += 100  
+
+        # ✅ 7. Passed pawns & promotion threats
+        if piece and piece.symbol().lower() == 'p':  # Pawn move
+            if temp_board.is_checkmate():  # Promoting to a winning position
+                score += 2000  
+            elif chess.square_rank(move.to_square) in [0, 7]:  # Pawn reaching last rank
+                score += 900  # Prioritize promotion
+
+        # ✅ 8. Rooks on open/semi-open files
+        if piece and piece.symbol().lower() == 'r':  # Rook move
+            file = chess.square_file(move.to_square)
+            if not any(board.piece_at(chess.square(file, rank)) for rank in range(8)):
+                score += 200  # Open file bonus
+
+        # ✅ 9. King activity in endgames
+        if temp_board.fullmove_number > 30 and piece and piece.symbol().lower() == 'k':  # King move in endgame
+            score += 50  # Encourage king activity in endgames
