@@ -1,3 +1,4 @@
+import multiprocessing
 import time
 import chess
 import numpy as np
@@ -269,39 +270,37 @@ def minimax(board, depth, alpha, beta, maximizing):
         transposition_table[key] = min_eval
         return min_eval
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def best_move(board, depth):
-    best_val = -float("inf")
+    """Finds the best move using parallelized minimax."""
     best_mv = None
-    for move in board.legal_moves:
-        board.push(move)
-        move_val = minimax(board, depth - 1, -float("inf"), float("inf"), False)
-        board.pop()
-        if move_val > best_val:
-            best_val = move_val
+    best_val = -float("inf")
+
+    legal_moves = list(board.legal_moves)
+    if not legal_moves:
+        return None
+
+    board_fen = board.fen()  # Store board state for multiprocessing
+
+    # Multiprocessing for first layer of minimax
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        move_values = pool.map(
+            minimax_worker, 
+            [(move, board_fen, depth - 1, -float("inf"), float("inf"), False) for move in legal_moves]
+        )
+
+    for i, move in enumerate(legal_moves):
+        if move_values[i] > best_val:
+            best_val = move_values[i]
             best_mv = move
+
     return best_mv
 
-
+def minimax_worker(args):
+    """Helper function for multiprocessing minimax."""
+    move, board_fen, depth, alpha, beta, is_maximizing = args
+    board = chess.Board(board_fen)
+    board.push(move)
+    return minimax(board, depth, alpha, beta, is_maximizing)
 
 def interactive_game_with_white_suggestion():
     mode = input("Start with FEN position or normal play? (f/n): ").strip()
@@ -321,7 +320,7 @@ def interactive_game_with_white_suggestion():
 
     while not board.is_game_over():
         print("\nCurrent Board:\n")
-        print(board)
+        print(board.transform(chess.flip_horizontal).transform(chess.flip_vertical)) 
         
         if (board.turn == chess.WHITE and is_player_white) or (board.turn == chess.BLACK and not is_player_white):
             # Player's turn
@@ -334,7 +333,7 @@ def interactive_game_with_white_suggestion():
             
             if not suggestion:  # If no opening move available, use engine
                 start_time = time.time()
-                suggestion = best_move(board, depth=3)
+                suggestion = best_move(board, depth=4)
                 elapsed = time.time() - start_time
                 print(f"\nEngine calculation time: {elapsed:.2f}s")
             
