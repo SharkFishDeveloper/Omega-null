@@ -1,16 +1,14 @@
 import time
 import chess
 import numpy as np
-
-# === Material Values ===
+import chess.polyglot
+from openings import best_opening_move
 PIECE_VALUES = {
     'P': 100, 'N': 300, 'B': 330, 'R': 500, 'Q': 900, 'K': 20000,
     'p': -100, 'n': -300, 'b': -330, 'r': -500, 'q': -900, 'k': -20000
 }
-
-# === Piece-Square Tables ===
 PIECE_SQUARE_TABLES = {
-    'P': [  # White Pawn
+    'P': np.array([
         [0, 0, 0, 0, 0, 0, 0, 0],
         [50, 50, 50, 50, 50, 50, 50, 50],
         [10, 15, 20, 30, 30, 20, 15, 10],
@@ -19,8 +17,8 @@ PIECE_SQUARE_TABLES = {
         [5, -5, -10, 5, 5, -10, -5, 5],
         [5, 10, 10, -20, -20, 10, 10, 5],
         [0, 0, 0, 0, 0, 0, 0, 0]
-    ],
-    'N': [  # White Knight
+    ]),
+    'N': np.array([
         [-50, -40, -30, -30, -30, -30, -40, -50],
         [-40, -20, 0, 5, 5, 0, -20, -40],
         [-30, 5, 20, 20, 20, 20, 5, -30],
@@ -29,8 +27,8 @@ PIECE_SQUARE_TABLES = {
         [-30, 0, 10, 20, 20, 10, 0, -30],
         [-40, -20, 0, 5, 5, 0, -20, -40],
         [-50, -40, -30, -30, -30, -30, -40, -50]
-    ],
-    'B': [  # White Bishop
+    ]),
+    'B': np.array([
         [-20, -10, -10, -10, -10, -10, -10, -20],
         [-10, 5, 0, 0, 0, 0, 5, -10],
         [-10, 10, 10, 10, 10, 10, 10, -10],
@@ -39,8 +37,8 @@ PIECE_SQUARE_TABLES = {
         [-10, 5, 10, 10, 10, 10, 5, -10],
         [-10, 0, 0, 0, 0, 0, 0, -10],
         [-20, -10, -10, -10, -10, -10, -10, -20]
-    ],
-    'R': [  # White Rook
+    ]),
+    'R': np.array([
         [0, 0, 5, 10, 10, 5, 0, 0],
         [-5, 0, 0, 5, 5, 0, 0, -5],
         [-5, 0, 0, 5, 5, 0, 0, -5],
@@ -49,8 +47,8 @@ PIECE_SQUARE_TABLES = {
         [-5, 0, 0, 5, 5, 0, 0, -5],
         [5, 10, 10, 10, 10, 10, 10, 5],
         [0, 0, 5, 10, 10, 5, 0, 0]
-    ],
-    'Q': [  # White Queen
+    ]),
+    'Q': np.array([
         [-20, -10, -10, -5, -5, -10, -10, -20],
         [-10, 0, 5, 0, 0, 0, 0, -10],
         [-10, 0, 5, 5, 5, 5, 0, -10],
@@ -59,8 +57,8 @@ PIECE_SQUARE_TABLES = {
         [-10, 5, 5, 5, 5, 5, 0, -10],
         [-10, 0, 5, 0, 0, 0, 0, -10],
         [-20, -10, -10, -5, -5, -10, -10, -20]
-    ],
-    'K': [  # White King (Middle Game)
+    ]),
+    'K': np.array([
         [-30, -40, -40, -50, -50, -40, -40, -30],
         [-30, -40, -40, -50, -50, -40, -40, -30],
         [-30, -40, -40, -50, -50, -40, -40, -30],
@@ -69,68 +67,103 @@ PIECE_SQUARE_TABLES = {
         [-10, -20, -20, -20, -20, -20, -20, -10],
         [20, 20, 0, 0, 0, 0, 20, 20],
         [20, 30, 10, 0, 0, 10, 30, 20]
-    ]
+    ])
 }
-# For black pieces, flip the white tables vertically.
+
 for piece in ['P', 'N', 'B', 'R', 'Q', 'K']:
     PIECE_SQUARE_TABLES[piece.lower()] = PIECE_SQUARE_TABLES[piece][::-1]
 
-# === Additional Heuristic Functions ===
-def order_moves(board):
-    moves = list(board.legal_moves)
-    opponent = not board.turn
 
-    def move_score(move):
-        score = 0
-        is_capture = board.is_capture(move)
-        victim_value = 0
-        attacker_value = 0
-        
-        # Check captures using MVV-LVA before pushing the move
-        if is_capture:
-            victim = board.piece_at(move.to_square)
-            attacker = board.piece_at(move.from_square)
-            victim_value = PIECE_VALUES.get(victim.symbol(), 0) if victim else 0
-            attacker_value = PIECE_VALUES.get(attacker.symbol(), 0) if attacker else 0
-            score += (victim_value - attacker_value)
-        
-        board.push(move)
-        # Check for checkmate (highest priority)
-        if board.is_checkmate():
-            board.pop()
-            return float('inf')
-        # Check if move gives check
-        if board.is_check():
-            score += 1000
-        # Check castling
-        if board.is_castling(move):
-            score += 300
-        # Check if moved piece is attacked by the original opponent
-        if board.is_attacked_by(opponent, move.to_square):
-            moved_piece = board.piece_at(move.to_square)
-            if moved_piece:
-                penalty = PIECE_VALUES.get(moved_piece.symbol().upper(), 0) * 0.5
-                score -= penalty
-        # Penalize hanging captures
-        if is_capture and board.is_attacked_by(opponent, move.to_square):
-            score -= attacker_value  # Attacker_value from before push
+
+killer_moves = {}
+history_heuristic = {}    
+
+def static_exchange_evaluation(board, square):
+    """
+    Evaluates whether capturing a piece at 'square' results in a material gain or loss.
+    Uses a naive Static Exchange Evaluation (SEE) method.
+    """
+    victim = board.piece_at(square)
+    if not victim:
+        return 0  # No piece to capture
+
+    victim_value = PIECE_VALUES.get(victim.symbol(), 0)
+    attackers = sorted(board.attackers(board.turn, square), key=lambda sq: PIECE_VALUES.get(board.piece_at(sq).symbol(), float('inf')))
+    defenders = list(board.attackers(not board.turn, square))
+
+    if not attackers:
+        return 0  # No way to capture
+
+    attacker = attackers[0]
+    attacker_value = PIECE_VALUES.get(board.piece_at(attacker).symbol(), 0)
+
+    if abs(attacker_value) < abs(victim_value):
+        return victim_value - attacker_value  # Winning trade
+    elif len(defenders) >= len(attackers):
+        return -attacker_value  # Losing trade
+    else:
+        return 0  # Neutral trade
+
+
+def is_hanging(board, square):
+    """
+    Checks if a piece on the given square is hanging (undefended and can be captured).
+    """
+    piece = board.piece_at(square)
+    if not piece:
+        return False  # No piece to check
+
+    attackers = board.attackers(not board.turn, square)
+    defenders = board.attackers(board.turn, square)
+
+    return len(defenders) == 0 and len(attackers) > 0  # Undefended but attacked
+
+
+def is_blunder(board, move):
+    """
+    Checks if a move leaves the piece hanging or results in a significant material loss.
+    """
+    board.push(move)
+    moved_piece = board.piece_at(move.to_square)
+
+    if moved_piece and is_hanging(board, move.to_square):
         board.pop()
-        return score
+        return True  # Moved piece is now hanging
 
-    return sorted(moves, key=move_score, reverse=True)
+    # Use ordered moves for better trade assessment
+    ordered_moves = sorted(board.legal_moves, key=lambda m: static_exchange_evaluation(board, m.to_square), reverse=True)
+    
+    material_loss = static_exchange_evaluation(board, move.to_square)
+    board.pop()
+
+    return material_loss < 0  # If negative, move results in a net material loss
+
+def order_moves(board):
+    """
+    Orders moves based on Static Exchange Evaluation (SEE).
+    Prioritizes captures and favorable trades.
+    """
+    moves = list(board.legal_moves)
+    return sorted(
+        moves,
+        key=lambda move: static_exchange_evaluation(board, move.to_square),
+        reverse=True  # Higher SEE values first (better trades)
+    )
 
 def evaluate_mobility(board):
-    original_turn = board.turn
-    try:
-        # White's mobility
-        board.turn = chess.WHITE
-        white_moves = board.legal_moves.count()
-        # Black's mobility
-        board.turn = chess.BLACK
-        black_moves = board.legal_moves.count()
-    finally:
-        board.turn = original_turn
-    return 15 * (white_moves - black_moves)
+    """
+    Evaluate mobility as the difference in the number of legal moves between
+    White and Black, weighted by a factor.
+    """
+    board_white = board.copy()
+    board_white.turn = chess.WHITE
+    white_moves = board_white.legal_moves.count()
+
+    board_black = board.copy()
+    board_black.turn = chess.BLACK
+    black_moves = board_black.legal_moves.count()
+
+    return 12* (white_moves - black_moves)
 
 def evaluate_king_safety(board):
     safety_score = 0
@@ -148,6 +181,7 @@ def evaluate_king_safety(board):
         safety_score += 20
     if not board.has_castling_rights(chess.BLACK) and black_king_sq != chess.E8:
         safety_score -= 20
+
     return safety_score
 
 def evaluate_pawn_structure(board):
@@ -188,93 +222,53 @@ def evaluate_board(board):
     for square in chess.SQUARES:
         piece = board.piece_at(square)
         if piece:
-            symbol = piece.symbol().upper()
-            value = PIECE_VALUES.get(symbol, 0)
-            if piece.color == chess.BLACK:
-                value = -value
-            # Add piece-square table value (customize tables)
-            row = chess.square_rank(square)
-            col = chess.square_file(square)
-            if piece.color == chess.BLACK:
-                row = 7 - row
-            # Example for pawns (modify with actual table)
-            if symbol == 'P':
-                value += (row - 2) * 10  # Encourage advancing pawns
-            score += value
+            score += PIECE_VALUES.get(piece.symbol(), 0)
+
     score += evaluate_mobility(board)
     score += evaluate_king_safety(board)
     score += evaluate_pawn_structure(board)
     return score
 
-def quiescence_search(board, alpha, beta, depth=3):
-    stand_pat = evaluate_board(board)
-    if stand_pat >= beta:
-        return beta
-    if alpha < stand_pat:
-        alpha = stand_pat
-    if depth == 0:
-        return alpha
-
-    for move in order_moves(board):
-        if not (board.is_capture(move) or board.gives_check(move)):
-            continue
-        board.push(move)
-        score = -quiescence_search(board, -beta, -alpha, depth-1)
-        board.pop()
-        if score >= beta:
-            return beta
-        if score > alpha:
-            alpha = score
-    return alpha
+transposition_table = {}
 
 def minimax(board, depth, alpha, beta, maximizing):
+    key = (chess.polyglot.zobrist_hash(board), depth, maximizing)
+
+    if key in transposition_table:
+        return transposition_table[key]
+    
     if depth == 0 or board.is_game_over():
-        return quiescence_search(board, alpha, beta, depth=2)  # Shallow quiescence
+        eval_score = evaluate_board(board)
+        transposition_table[key] = eval_score
+        return eval_score
 
     moves = order_moves(board)
-    if not moves:
-        return evaluate_board(board)
-    
+    moves[:10]
     if maximizing:
-        max_eval = -float('inf')
+        max_eval = -float("inf")
         for move in moves:
             board.push(move)
-            eval_val = minimax(board, depth-1, alpha, beta, False)
+            eval_value = minimax(board, depth - 1, alpha, beta, False)
             board.pop()
-            max_eval = max(max_eval, eval_val)
-            alpha = max(alpha, eval_val)
+            max_eval = max(max_eval, eval_value)
+            alpha = max(alpha, eval_value)
             if beta <= alpha:
                 break
+        transposition_table[key] = max_eval
         return max_eval
     else:
-        min_eval = float('inf')
+        min_eval = float("inf")
         for move in moves:
             board.push(move)
-            eval_val = minimax(board, depth-1, alpha, beta, True)
+            eval_value = minimax(board, depth - 1, alpha, beta, True)
             board.pop()
-            min_eval = min(min_eval, eval_val)
-            beta = min(beta, eval_val)
+            min_eval = min(min_eval, eval_value)
+            beta = min(beta, eval_value)
             if beta <= alpha:
                 break
+        transposition_table[key] = min_eval
         return min_eval
 
-def best_move(board,depth,max_time=4):
-    start_time = time.time()
-    best_move = None
-    best_score = -float('inf')
-    depth = 1
-    while time.time() - start_time < max_time:
-        for move in order_moves(board):
-            if time.time() - start_time >= max_time:
-                break
-            board.push(move)
-            current_score = minimax(board, depth-1, -float('inf'), float('inf'), False)
-            board.pop()
-            if current_score > best_score:
-                best_score = current_score
-                best_move = move
-        depth += 1
-    return best_move if best_move else next(iter(board.legal_moves))
 
 
 
@@ -295,31 +289,61 @@ def best_move(board,depth,max_time=4):
 
 
 
+def best_move(board, depth):
+    best_val = -float("inf")
+    best_mv = None
+    for move in board.legal_moves:
+        board.push(move)
+        move_val = minimax(board, depth - 1, -float("inf"), float("inf"), False)
+        board.pop()
+        if move_val > best_val:
+            best_val = move_val
+            best_mv = move
+    return best_mv
 
 
 
 def interactive_game_with_white_suggestion():
-    board = chess.Board()
+    mode = input("Start with FEN position or normal play? (f/n): ").strip()
+    if mode == "f":
+        fen = input("Enter FEN position: ").strip()
+        try:
+            board = chess.Board(fen)
+        except ValueError:
+            print("Invalid FEN. Using default starting position.")
+            board = chess.Board()
+    else:
+        board = chess.Board()
+
     player_side = input("Choose your side (W/B): ").strip().upper()
     is_player_white = (player_side == "W")
     move_count = 0
-    
+
     while not board.is_game_over():
         print("\nCurrent Board:\n")
-        if  board.turn == chess.WHITE:
-            print(board)
-        else:
-            print(board.transform(chess.flip_horizontal).transform(chess.flip_vertical)) 
+        print(board)
         
-        suggestion = False
-        if (board.turn == chess.WHITE and is_player_white==False) or (board.turn == chess.BLACK and  is_player_white):
-            suggestion = best_move(board, depth=3)
+        if (board.turn == chess.WHITE and is_player_white) or (board.turn == chess.BLACK and not is_player_white):
+            # Player's turn
+            user_move = input(f"Enter move for {'White' if board.turn == chess.WHITE else 'Black'} (SAN format, e.g., e4, Nf3): ")
+        else:
+            # AI's turn
+            suggestion = None
+            if move_count < 5:  # Use opening moves for first 5 moves
+                suggestion = best_opening_move(board)
+            
+            if not suggestion:  # If no opening move available, use engine
+                start_time = time.time()
+                suggestion = best_move(board, depth=3)
+                elapsed = time.time() - start_time
+                print(f"\nEngine calculation time: {elapsed:.2f}s")
+            
             if suggestion:
-                print(f"Engine suggests for {'White' if board.turn == chess.WHITE else 'Black'}: {board.san(suggestion)}")
+                print(f"AI plays: {board.san(suggestion)}")
+                user_move = board.san(suggestion)
             else:
                 print(f"No legal moves available for {'White' if board.turn == chess.WHITE else 'Black'}!")
-        
-        user_move = input(f"Enter {'White' if board.turn == chess.WHITE else 'Black'}'s move (SAN, e.g., e4, Nf3): ")
+                break
         
         try:
             move = board.parse_san(user_move)
@@ -330,9 +354,8 @@ def interactive_game_with_white_suggestion():
                 print("Illegal move. Please try again.")
         except Exception:
             print("Invalid move notation. Please try again.")
-    
+
     print("Game over after", move_count, "moves. Result:", board.result())
 
 if __name__ == "__main__":
     interactive_game_with_white_suggestion()
-
