@@ -1,8 +1,10 @@
 import multiprocessing
+import os
 import time
 import chess
 import numpy as np
 import chess.polyglot
+import pygame
 from openings import best_opening_move
 PIECE_VALUES = {
     'P': 100, 'N': 300, 'B': 330, 'R': 500, 'Q': 900, 'K': 20000,
@@ -356,5 +358,120 @@ def interactive_game_with_white_suggestion():
 
     print("Game over after", move_count, "moves. Result:", board.result())
 
+# if __name__ == "__main__":
+#     interactive_game_with_white_suggestion()
+
+
+
+
+# Load piece images
+def load_images():
+    pieces = {}
+    piece_names = ["R", "N", "B", "Q", "K", "P"]
+    colors = ["w", "b"]
+    for color in colors:
+        for piece in piece_names:
+            image = pygame.image.load(f"png_chess/{color}{piece}.png")
+            pieces[f"{color}{piece}"] = pygame.transform.scale(image, (75, 75))  # Increased piece size
+    return pieces
+
+def draw_board(screen, board, selected_square, ai_move):
+    colors = [(238, 238, 210), (118, 150, 86)]
+    highlight_color = (255, 215, 0)  # Removed Alpha
+    screen.fill((0, 0, 0))
+    
+    square_size = 75  # Increased square size
+    
+    # Draw board from black's perspective (flipped vertically)
+    for row in range(8):
+        for col in range(8):
+            color = colors[(row + col) % 2]
+            pygame.draw.rect(screen, color, (col * square_size, (7 - row) * square_size, square_size, square_size))
+            
+    if ai_move:
+        from_sq, to_sq = ai_move.from_square, ai_move.to_square
+        from_col, from_row = chess.square_file(from_sq), chess.square_rank(from_sq)
+        to_col, to_row = chess.square_file(to_sq), chess.square_rank(to_sq)
+        pygame.draw.rect(screen, highlight_color, (from_col * square_size, from_row * square_size, square_size, square_size))  # No need to flip since board is flipped
+        pygame.draw.rect(screen, highlight_color, (to_col * square_size, to_row * square_size, square_size, square_size))
+    
+    if selected_square is not None:
+        col, row = chess.square_file(selected_square), chess.square_rank(selected_square)
+        pygame.draw.rect(screen, (255, 218, 185), (col * square_size, row * square_size, square_size, square_size), 5)  # No need to flip since board is flipped
+
+def draw_pieces(screen, board, images):
+    square_size = 75  # Increased square size
+    for square in chess.SQUARES:
+        piece = board.piece_at(square)
+        if piece:
+            color = "w" if piece.color == chess.WHITE else "b"
+            piece_type = piece.symbol().upper()
+            img = images.get(f"{color}{piece_type}")
+            if img:
+                col, row = chess.square_file(square), chess.square_rank(square)
+                screen.blit(img, (col * square_size, row * square_size))  # No need to flip since board is flipped
+
+def main():
+    pygame.init()
+    screen = pygame.display.set_mode((600, 600))  # Increased screen size
+    pygame.display.set_caption("Chess")
+    images = load_images()
+    board = chess.Board()
+    selected_square = None
+    player_color = chess.BLACK  # Player is Black, AI is White
+    ai_move = None
+    ai_thinking = False  
+
+    running = True
+    while running:
+        draw_board(screen, board, selected_square, ai_move)
+        draw_pieces(screen, board, images)
+        pygame.display.flip()
+        
+        # AI plays first if it's White
+        if board.turn == chess.WHITE and not ai_thinking:
+            ai_thinking = True
+            pygame.display.flip()
+            ai_move = best_move(board, 4)
+            if ai_move:
+                board.push(ai_move)
+            ai_thinking = False
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            if event.type == pygame.MOUSEBUTTONDOWN and board.turn == player_color:
+                col, row = event.pos[0] // 75, event.pos[1] // 75  # Updated square size
+                # Flip the row when converting to square (since board is drawn flipped)
+                square = chess.square(col, row)  # Changed from 7 - row
+                
+                if selected_square is None:
+                    # Select a piece if it's our color
+                    if board.piece_at(square) and board.piece_at(square).color == player_color:
+                        selected_square = square
+                else:
+                    # If clicking on the same square, deselect
+                    if square == selected_square:
+                        selected_square = None
+                    else:
+                        # If clicking on another square, try to make a move
+                        move = chess.Move(selected_square, square)
+                        if move in board.legal_moves:
+                            board.push(move)
+                            ai_move = None
+                            selected_square = None
+                        # If clicking on another piece of our color, select that instead
+                        elif board.piece_at(square) and board.piece_at(square).color == player_color:
+                            selected_square = square
+                        # Otherwise, deselect (clicked on empty square or opponent piece)
+                        else:
+                            selected_square = None
+        
+        if board.is_game_over():
+            print("Game Over!", board.result())
+            running = False
+            pygame.time.wait(60000) 
+
 if __name__ == "__main__":
-    interactive_game_with_white_suggestion()
+    os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"  # Hides the pygame message
+    main()
