@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import sys
 import time
 import chess
 import numpy as np
@@ -127,8 +128,19 @@ def is_blunder(board, move):
     Checks if a move leaves the piece hanging or results in a significant material loss.
     """
     board.push(move)
-    moved_piece = board.piece_at(move.to_square)
+    for reply in board.legal_moves:
+        board.push(reply)
+        if board.is_checkmate():
+            board.pop()
+            board.pop()
+            return True  # Opponent can checkmate us after this move
+        board.pop()
 
+    if board.is_stalemate():
+        board.pop()
+        return True    
+    
+    moved_piece = board.piece_at(move.to_square)
     if moved_piece and is_hanging(board, move.to_square):
         board.pop()
         return True  # Moved piece is now hanging
@@ -371,7 +383,7 @@ def load_images():
     colors = ["w", "b"]
     for color in colors:
         for piece in piece_names:
-            image = pygame.image.load(f"png_chess/{color}{piece}.png")
+            image = pygame.image.load(f"pieces_png/{color}{piece}.png")
             pieces[f"{color}{piece}"] = pygame.transform.scale(image, (75, 75))  # Increased piece size
     return pieces
 
@@ -411,12 +423,49 @@ def draw_pieces(screen, board, images):
                 col, row = chess.square_file(square), chess.square_rank(square)
                 screen.blit(img, (col * square_size, row * square_size))  # No need to flip since board is flipped
 
+def ask_promotion(screen):
+    font = pygame.font.SysFont("Arial", 32)
+    options = {
+        "Q": chess.QUEEN,
+        "R": chess.ROOK,
+        "B": chess.BISHOP,
+        "N": chess.KNIGHT,
+    }
+
+    buttons = []
+    for i, (label, value) in enumerate(options.items()):
+        rect = pygame.Rect(100 + i * 100, 250, 80, 80)
+        buttons.append((rect, label, value))
+
+    while True:
+        pygame.draw.rect(screen, (200, 200, 200), (80, 200, 440, 150))
+        pygame.draw.rect(screen, (0, 0, 0), (80, 200, 440, 150), 2)
+
+        for rect, label, _ in buttons:
+            pygame.draw.rect(screen, (255, 255, 255), rect)
+            pygame.draw.rect(screen, (0, 0, 0), rect, 2)
+            text = font.render(label, True, (0, 0, 0))
+            screen.blit(text, (rect.x + 25, rect.y + 20))
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                pos = pygame.mouse.get_pos()
+                for rect, _, value in buttons:
+                    if rect.collidepoint(pos):
+                        return value
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((600, 600))  # Increased screen size
     pygame.display.set_caption("Chess")
     images = load_images()
-    board = chess.Board()
+    # board = chess.Board()
+    board = chess.Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
     selected_square = None
     player_color = chess.BLACK  # Player is Black, AI is White
     ai_move = None
@@ -456,6 +505,9 @@ def main():
                     else:
                         # If clicking on another square, try to make a move
                         move = chess.Move(selected_square, square)
+                        if chess.square_rank(square) in [0, 7] and board.piece_at(selected_square).piece_type == chess.PAWN:
+                            promo_piece = ask_promotion(screen)
+                            move = chess.Move(selected_square, square, promotion=promo_piece)
                         if move in board.legal_moves:
                             board.push(move)
                             ai_move = None
